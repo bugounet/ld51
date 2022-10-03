@@ -1,0 +1,16 @@
+{%load static %}
+<html>
+    <head>
+        <link rel="stylesheet" href="{% static "dumblympics_app/styles.css" %}"/>
+    </head>
+    <body>
+        <h1 id="instruction">Dumblympics</h1>
+        <div id="playground">
+            <form action="" method="POST">
+                {% csrf_token %}
+                {{nickname_form.nickname}}
+                <input type="submit" value="Go!">
+            </form>
+        </div>
+    </body>
+</html>

@@ -1,0 +1,170 @@
+{%load static %}
+<html>
+    <head>
+        <link rel="stylesheet" href="{% static "dumblympics_app/styles.css" %}"/>
+    </head>
+    <body>
+        <h1 id="instruction">Wait for other competitors</h1>
+        <div id="playground">
+            <div id="startline">
+            </div>
+            <div id="game1" style="display:none">
+                <div id="circle-around"></div>
+                <div onmouseenter="hoover(0)" class="quarter" style="left:0; top:0">0</div>
+                <div onmouseenter="hoover(1)" class="quarter" style="left:50%; top:0">1</div>
+                <div onmouseenter="hoover(2)" class="quarter" style="left:50%; top:50%">2</div>
+                <div onmouseenter="hoover(3)" class="quarter" style="left:0; top:50%">3</div>
+            </div>
+
+            <div id="game2" style="display:none">
+                <div id="BIGBUTTON" onclick="button_clicked()"></div>
+            </div>
+
+            <div id="scoreboard" style="display:none">
+                <h2>Scores</h2>
+                <table id="scores">
+                    
+                </table>
+            </div>
+            <div id="race_lane">
+            </div>
+        </div>
+        <script>
+            var leaderboard = []
+            var players = {}
+            var me = {
+                nickname: '{{nickname}}',
+                id: '{{uid}}'
+            };
+
+            // game 1: detect position in 4 quarters of the screen
+            var hoovered_zones = []
+            var circles_count = 0
+            
+            function compare_arrays(a1, a2) {
+                // yeah! fuck you JS!
+                return JSON.stringify(a1)==JSON.stringify(a2)
+            }
+
+            function hoover(zone) {
+                console.log("hoovered zone ", zone, ": ", hoovered_zones.slice(-4));
+                hoovered_zones.push(zone);
+                var last_zones = hoovered_zones.slice(-4)
+
+                if(compare_arrays(last_zones, [0,1,2,3]) || compare_arrays(last_zones, [3,2,1,0])) {
+                    circles_count++;
+                    document.getElementById("circle-around").innerHTML = circles_count+""
+                }
+            }
+
+            function game1() {
+                document.getElementById("instruction").innerHTML="Draw as many circles as you can by moving your mouse on the screen"
+                document.getElementById("game1").style.display='block'
+                document.getElementById("game2").style.display='none'
+                document.getElementById("startline").style.display='none'
+                document.getElementById("scoreboard").style.display='none'
+            }
+
+            // game 2
+            var clicked_count = 0
+
+            function button_clicked() {
+                clicked_count += 1
+                document.getElementById("BIGBUTTON").innerHTML = clicked_count
+            }
+
+            function game2() {
+                document.getElementById("instruction").innerHTML="Click the big red button as manytimes as possible"
+                document.getElementById("game1").style.display='none'
+                document.getElementById("game2").style.display='block'
+                document.getElementById("startline").style.display='none'
+                document.getElementById("scoreboard").style.display='none'
+            }
+
+            
+            // game engine
+            function play() {
+                game1()
+                setTimeout(game2, 10000)
+                setTimeout(end, 20000)
+            }
+            
+            function end() {
+                document.getElementById("instruction").innerHTML="Time's up!"
+                document.getElementById("game1").style.display='none'
+                document.getElementById("game2").style.display='none'
+                document.getElementById("startline").style.display='none'
+                document.getElementById("scoreboard").style.display = 'block'
+                function leaderboard_as_html() {
+                    results = '<tr><th>Nickname</th><th>Score</th></tr>';
+                    for(var i=0; i<10; i++) {
+                        var player = leaderboard[i];
+                        if (player) {
+                            results += (
+                                '<tr><td>'+player.nickname+'</td><td>'+player.score+'</td></tr>'
+                            )
+                        } else {
+                            results += '<tr><td class="score-nickname">No one</td><td class="score-value">-</td></tr>'
+                        }
+                    }
+                    return results;
+                }
+                function update_leaderboard () {
+                    document.getElementById("scores").innerHTML = leaderboard_as_html();
+                    setTimeout(update_leaderboard, 5000)
+                };
+                update_leaderboard();
+            }
+
+            function refresh_startline(players_list) {
+                startline = ""
+                console.log("players list", players_list, players_list.length)
+                for(var i=0; i<Object.keys(players_list).length; i++) {
+                    player_id = Object.keys(players_list)[i]
+                    player = players_list[player_id]
+                    if(player_id == me.id) {
+                        startline += '<li class="competitor">You</li>'
+                    } else {
+                        startline += '<li class="competitor">'+player.nickname+"</li>"
+                    }
+                }
+                console.log("html", startline)
+                document.getElementById("startline").innerHTML = startline;
+            }
+            const socket = new WebSocket(
+                'ws://'
+                + window.location.host
+                + '/ws/race/'
+                + {{race_id}}
+                + '/'
+            );
+            socket.onmessage = function handle_message(event) {
+                console.log(event.data)
+                data = JSON.parse(event.data)
+                console.log("received", data)
+                if (data.event == "new_player") {
+                    for(var i=0; i<data.players.length; i++) {
+                        players[data.players[i].id] = data.players[i]
+                    }
+                    refresh_startline(data.players)
+                } else if (data.event == "gooo") {
+                    play()
+                } else if (data.event == "new_leaderboard") {
+                    leaderboard = data.leaderboard
+                }
+            }
+            function send_current_score() {
+                socket.send(JSON.stringify({
+                    "command": "update_score",
+                    "player_id": me.id,
+                    "score": clicked_count + circles_count
+                }))
+                setTimeout(send_current_score, 1000)
+            }
+            socket.onopen = function start_and_ask_players(event) {
+                socket.send(JSON.stringify({"command":"hello", "player": me}));
+                setTimeout(send_current_score, 1000)
+            };
+        </script>
+    </body>
+</html>
